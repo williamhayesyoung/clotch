@@ -1,0 +1,33 @@
+# Build products
+.build/
+build/
+*.o
+*.swiftmodule
+
+# SwiftPM
+.swiftpm/
+Package.pins
+
+# Xcode (in case the project is opened there)
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Editor / misc
+*.swp
+*~
+.idea/
+.vscode/
+
+# Local secrets / environment
+*.pem
+*.key
+.env
+.env.*
