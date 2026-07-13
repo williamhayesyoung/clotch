@@ -127,6 +127,26 @@ check(cfg.notifyColors["hermes"] == "#ebbcba", "config notify_color_hermes (unqu
 check(cfg.graceMs == nil, "absent key stays nil")
 check(ConfigParser.parse("").theme == nil, "empty config")
 
+// MARK: Tray shape
+
+let trayBounds = CGRect(x: 0, y: 0, width: 700, height: 400)
+let tray = TrayShape.outline(bounds: trayBounds)
+let tbb = tray.boundingBoxOfPath
+check(abs(tbb.minX - trayBounds.minX) < 0.5 && abs(tbb.maxX - trayBounds.maxX) < 0.5
+        && abs(tbb.minY - trayBounds.minY) < 0.5 && abs(tbb.maxY - trayBounds.maxY) < 0.5,
+      "tray path fills bounds")
+check(tray.contains(CGPoint(x: 350, y: 200)), "tray contains center")
+check(tray.contains(CGPoint(x: 2, y: 398)), "tray contains top-left flare")
+check(!tray.contains(CGPoint(x: 2, y: 200)), "tray side inset by fillet")
+check(tray.contains(CGPoint(x: 14, y: 200)), "tray body starts after fillet inset")
+check(!tray.contains(CGPoint(x: 13, y: 1)), "bottom-left corner rounded off")
+check(!tray.contains(CGPoint(x: 687, y: 1)), "bottom-right corner rounded off")
+check(tray.contains(CGPoint(x: 350, y: 1)), "bottom edge center inside")
+check(tray.contains(CGPoint(x: 20, y: 200)) == tray.contains(CGPoint(x: 680, y: 200)),
+      "tray path symmetric")
+let openTray = TrayShape.outline(bounds: trayBounds, closed: false)
+check(!openTray.isEmpty, "open border path exists")
+
 // MARK: Summary
 
 if failures > 0 {
