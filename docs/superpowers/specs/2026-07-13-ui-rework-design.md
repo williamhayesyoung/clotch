@@ -33,9 +33,9 @@ Replace the current `cornerRadius`/`maskedCorners` treatment in
   omitted along the straight top edge (no seam against the menu bar). Uses
   `strokeStart`/`strokeEnd` or an open path covering only sides + bottom +
   fillets.
-- **Shadow**: deeper and softer than the default panel shadow (larger radius,
-  lower opacity, slight y-offset). Panel `hasShadow` may be disabled in favor
-  of a layer shadow if masking clips the default one.
+- **Shadow**: keep the default panel shadow (`hasShadow = true`). AppKit
+  derives it from the rendered alpha, so it follows the new silhouette; a
+  custom deeper layer shadow would be clipped at the window bounds.
 - Notification tint layer keeps working but its path becomes the new tray
   path (inset 1 pt) so the glow follows the new silhouette.
 - Resize grab zones, tracking, and callbacks unchanged.
