@@ -33,7 +33,7 @@ public enum TrayShape {
         p.move(to: CGPoint(x: minX, y: maxY))
         // Concave top-left fillet: flare from full width into the inset side.
         p.addQuadCurve(to: CGPoint(x: left, y: maxY - f),
-                       control: CGPoint(x: minX, y: maxY - f))
+                       control: CGPoint(x: left, y: maxY))
         p.addLine(to: CGPoint(x: left, y: minY + r))
         // Bottom-left corner.
         p.addCurve(to: CGPoint(x: left + r, y: minY),
@@ -47,7 +47,7 @@ public enum TrayShape {
         p.addLine(to: CGPoint(x: right, y: maxY - f))
         // Concave top-right fillet.
         p.addQuadCurve(to: CGPoint(x: maxX, y: maxY),
-                       control: CGPoint(x: maxX, y: maxY - f))
+                       control: CGPoint(x: right, y: maxY))
         if closed { p.closeSubpath() }
         return p
     }
