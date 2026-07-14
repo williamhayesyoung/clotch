@@ -136,7 +136,9 @@ check(abs(tbb.minX - trayBounds.minX) < 0.5 && abs(tbb.maxX - trayBounds.maxX) <
         && abs(tbb.minY - trayBounds.minY) < 0.5 && abs(tbb.maxY - trayBounds.maxY) < 0.5,
       "tray path fills bounds")
 check(tray.contains(CGPoint(x: 350, y: 200)), "tray contains center")
-check(tray.contains(CGPoint(x: 2, y: 398)), "tray contains top-left flare")
+check(tray.contains(CGPoint(x: 6, y: 399.5)), "flare sliver inside near top edge")
+check(!tray.contains(CGPoint(x: 2, y: 396)), "top-left fillet concave (scooped)")
+check(!tray.contains(CGPoint(x: 698, y: 396)), "top-right fillet concave (scooped)")
 check(!tray.contains(CGPoint(x: 2, y: 200)), "tray side inset by fillet")
 check(tray.contains(CGPoint(x: 14, y: 200)), "tray body starts after fillet inset")
 check(!tray.contains(CGPoint(x: 13, y: 1)), "bottom-left corner rounded off")
