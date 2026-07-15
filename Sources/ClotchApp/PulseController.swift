@@ -3,14 +3,23 @@ import ClotchCore
 
 /// Transparent click-through window that draws a breathing glow ring
 /// hugging the notch outline (or a top-edge bar when there is no notch).
+/// The stroke is a horizontal accent gradient; a wider ambient layer bleeds
+/// soft light onto the menu bar.
 final class PulseController {
     private var window: NSWindow?
-    private let shape = CAShapeLayer()
+    private let shape = CAShapeLayer()       // gradient mask (white stroke)
+    private let gradient = CAGradientLayer()
+    private let ambient = CAShapeLayer()     // soft under-glow
     private(set) var isActive = false
 
     func show(colorHex: String?, notchRect: CGRect?, screenFrame: CGRect) {
         let rgb = colorHex.flatMap(parseHexColor) ?? (r: 1.0, g: 0.42, b: 0.0)
         let color = NSColor(calibratedRed: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
+        // Brighten toward white by 25% for the gradient's light end.
+        let bright = NSColor(
+            calibratedRed: rgb.r + (1 - rgb.r) * 0.25,
+            green: rgb.g + (1 - rgb.g) * 0.25,
+            blue: rgb.b + (1 - rgb.b) * 0.25, alpha: 1)
 
         let margin: CGFloat = 12
         let frame: CGRect
@@ -31,33 +40,60 @@ final class PulseController {
         }
 
         let w = ensureWindow(frame: frame)
-        shape.frame = w.contentView!.bounds
-        shape.path = pulsePath(bounds: w.contentView!.bounds, hasNotch: notchRect != nil)
-        shape.strokeColor = color.cgColor
+        let bounds = w.contentView!.bounds
+        let path = pulsePath(bounds: bounds, hasNotch: notchRect != nil)
+
+        // Ambient under-glow: wider, blurred, bleeds onto the menu bar.
+        ambient.frame = bounds
+        ambient.path = path
+        ambient.fillColor = nil
+        ambient.strokeColor = color.withAlphaComponent(0.5).cgColor
+        ambient.lineWidth = 5
+        ambient.lineCap = .round
+        ambient.shadowColor = color.cgColor
+        ambient.shadowOpacity = 1
+        ambient.shadowOffset = .zero
+
+        // Crisp gradient stroke on top.
+        shape.frame = bounds
+        shape.path = path
         shape.fillColor = nil
+        shape.strokeColor = NSColor.white.cgColor
         shape.lineWidth = 3
         shape.lineCap = .round
-        shape.shadowColor = color.cgColor
-        shape.shadowOpacity = 1
-        shape.shadowRadius = 6
-        shape.shadowOffset = .zero
+        gradient.frame = bounds
+        gradient.colors = [color.cgColor, bright.cgColor, color.cgColor]
+        gradient.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        gradient.mask = shape
 
-        shape.removeAllAnimations()
-        let breathe = CABasicAnimation(keyPath: "opacity")
-        breathe.fromValue = 0.25
-        breathe.toValue = 1.0
-        breathe.duration = 0.9
-        breathe.autoreverses = true
-        breathe.repeatCount = .infinity
-        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        shape.add(breathe, forKey: "breathe")
+        for layer in [ambient, gradient] as [CALayer] {
+            layer.removeAllAnimations()
+            let breathe = CABasicAnimation(keyPath: "opacity")
+            breathe.fromValue = 0.35
+            breathe.toValue = 1.0
+            breathe.duration = 1.4
+            breathe.autoreverses = true
+            breathe.repeatCount = .infinity
+            breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(breathe, forKey: "breathe")
+        }
+        let radius = CABasicAnimation(keyPath: "shadowRadius")
+        radius.fromValue = 4.0
+        radius.toValue = 10.0
+        radius.duration = 1.4
+        radius.autoreverses = true
+        radius.repeatCount = .infinity
+        radius.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        ambient.add(radius, forKey: "radius")
 
         w.orderFrontRegardless()
         isActive = true
     }
 
     func clear() {
-        shape.removeAllAnimations()
+        ambient.removeAllAnimations()
+        gradient.removeAllAnimations()
         window?.orderOut(nil)
         isActive = false
     }
@@ -76,7 +112,8 @@ final class PulseController {
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         let v = NSView(frame: CGRect(origin: .zero, size: frame.size))
         v.wantsLayer = true
-        v.layer?.addSublayer(shape)
+        v.layer?.addSublayer(ambient)
+        v.layer?.addSublayer(gradient)
         w.contentView = v
         window = w
         return w
