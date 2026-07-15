@@ -42,6 +42,8 @@ final class TrayContentView: NSView {
     private var dragStartMouse: CGPoint = .zero
     private let grabZone: CGFloat = 8
     private var animationGeneration = 0
+    private var cachedMaskSize: CGSize = .zero
+    private var cachedMask: NSImage?
 
     init(terminal: NSView, topInset: CGFloat) {
         self.terminalView = terminal
@@ -118,7 +120,11 @@ final class TrayContentView: NSView {
         borderLayer.frame = bounds
         tintLayer.path = TrayShape.outline(bounds: bounds.insetBy(dx: 1, dy: 1))
         tintLayer.frame = bounds
-        blur.maskImage = TrayContentView.maskImage(for: bounds.size)
+        if bounds.size != cachedMaskSize {
+            cachedMaskSize = bounds.size
+            cachedMask = TrayContentView.maskImage(for: bounds.size)
+        }
+        blur.maskImage = cachedMask
     }
 
     /// Alpha mask image of the tray silhouette (clips the blur material).
@@ -153,6 +159,9 @@ final class TrayContentView: NSView {
     // final rect instantly and the content layer scales from a notch-sized
     // fraction, anchored at top-center.
 
+    // Deliberately mutates the backing layer's anchorPoint/position/transform of this
+    // layer-backed view; AppKit nominally owns these, but this works in practice, and
+    // position is kept consistent with the anchor to avoid visual jumps.
     private func prepareAnchor() {
         guard let layer else { return }
         layer.anchorPoint = CGPoint(x: 0.5, y: 1)
@@ -243,8 +252,9 @@ final class TrayContentView: NSView {
 
     private func edge(at p: CGPoint) -> DragEdge? {
         let nearBottom = p.y < grabZone
-        let nearLeft = p.x < grabZone + TrayShape.filletRadius
-        let nearRight = p.x > bounds.width - grabZone - TrayShape.filletRadius
+        let sideInset = nearBottom ? TrayShape.cornerRadius : TrayShape.filletRadius
+        let nearLeft = p.x < grabZone + sideInset
+        let nearRight = p.x > bounds.width - grabZone - sideInset
         if nearBottom && nearLeft { return .bottomLeft }
         if nearBottom && nearRight { return .bottomRight }
         if nearBottom { return .bottom }
