@@ -41,6 +41,7 @@ final class TrayContentView: NSView {
     private var dragStartSize: CGSize = .zero
     private var dragStartMouse: CGPoint = .zero
     private let grabZone: CGFloat = 8
+    private var animationGeneration = 0
 
     init(terminal: NSView, topInset: CGFloat) {
         self.terminalView = terminal
@@ -162,6 +163,13 @@ final class TrayContentView: NSView {
         guard let layer else { completion(); return }
         prepareAnchor()
 
+        animationGeneration += 1
+        // Cancel any in-flight fold so its stale state can't bleed into this open.
+        layer.removeAllAnimations()
+        layer.transform = CATransform3DIdentity
+        layer.opacity = 1
+        terminalView.layer?.removeAllAnimations()
+
         CATransaction.begin()
         CATransaction.setCompletionBlock(completion)
 
@@ -199,12 +207,19 @@ final class TrayContentView: NSView {
         guard let layer else { completion(); return }
         prepareAnchor()
 
+        animationGeneration += 1
+        let generation = animationGeneration
+        layer.removeAllAnimations()
+        terminalView.layer?.removeAllAnimations()
+
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
-            // Reset so the next unfold starts clean.
-            self?.layer?.removeAllAnimations()
-            self?.layer?.transform = CATransform3DIdentity
-            self?.layer?.opacity = 1
+            // Reset only if no newer animation superseded this fold.
+            if let self, self.animationGeneration == generation {
+                self.layer?.removeAllAnimations()
+                self.layer?.transform = CATransform3DIdentity
+                self.layer?.opacity = 1
+            }
             completion()
         }
         let shrink = CABasicAnimation(keyPath: "transform")
