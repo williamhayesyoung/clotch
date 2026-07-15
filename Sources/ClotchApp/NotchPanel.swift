@@ -28,8 +28,10 @@ final class NotchPanel: NSPanel {
 /// edge drag zones for resizing, optional colored tint border for notifications.
 final class TrayContentView: NSView {
     private let blur = NSVisualEffectView()
+    private let overlay = CAGradientLayer()
+    private let maskShape = CAShapeLayer()
+    private let borderLayer = CAShapeLayer()
     private let tintLayer = CAShapeLayer()
-    private let cornerRadius: CGFloat = 18
     var onResize: ((CGSize) -> Void)?
     var onResizeEnded: (() -> Void)?
 
@@ -43,14 +45,24 @@ final class TrayContentView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
 
-        // Frosted material: dark, translucent, blurs whatever is behind the tray.
+        // Frosted material, silhouette-masked twice: maskImage clips the
+        // material itself, the container layer mask clips everything else.
         blur.material = .hudWindow
         blur.blendingMode = .behindWindow
         blur.state = .active
         blur.wantsLayer = true
-        blur.layer?.cornerRadius = cornerRadius
-        blur.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        blur.layer?.masksToBounds = true
+        layer?.mask = maskShape
+
+        // Fusion overlay: pure theme-black at the top (blends into the notch
+        // cutout) easing to translucent toward the bottom. Sits above the blur
+        // material, below the terminal (inserted at sublayer index 0).
+        overlay.colors = [
+            NSColor.black.withAlphaComponent(0.85).cgColor,
+            NSColor.black.withAlphaComponent(1.0).cgColor,
+        ]
+        overlay.startPoint = CGPoint(x: 0.5, y: 0)   // layer coords: y0 = bottom
+        overlay.endPoint = CGPoint(x: 0.5, y: 1)     // y1 = top
+        blur.layer?.insertSublayer(overlay, at: 0)
         blur.translatesAutoresizingMaskIntoConstraints = false
         addSubview(blur)
 
@@ -64,10 +76,16 @@ final class TrayContentView: NSView {
             blur.bottomAnchor.constraint(equalTo: bottomAnchor),
             // Keep terminal text clear of the notch cutout (and menu bar strip).
             terminal.topAnchor.constraint(equalTo: blur.topAnchor, constant: topInset + 8),
-            terminal.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 12),
-            terminal.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -12),
-            terminal.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -12),
+            terminal.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: TrayShape.filletRadius + 12),
+            terminal.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -(TrayShape.filletRadius + 12)),
+            terminal.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -16),
         ])
+
+        // Hairline border along sides + bottom + fillets; no top seam.
+        borderLayer.fillColor = nil
+        borderLayer.strokeColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        borderLayer.lineWidth = 1
+        layer?.addSublayer(borderLayer)
 
         // Notification tint: glow only (no visible outline at rest).
         tintLayer.fillColor = nil
@@ -88,12 +106,27 @@ final class TrayContentView: NSView {
 
     override func layout() {
         super.layout()
-        let path = CGPath(
-            roundedRect: bounds.insetBy(dx: 1, dy: 1),
-            cornerWidth: cornerRadius - 1, cornerHeight: cornerRadius - 1, transform: nil
-        )
-        tintLayer.path = path
+        let silhouette = TrayShape.outline(bounds: bounds)
+        maskShape.path = silhouette
+        maskShape.frame = bounds
+        overlay.frame = blur.bounds
+        borderLayer.path = TrayShape.outline(bounds: bounds.insetBy(dx: 0.5, dy: 0.5), closed: false)
+        borderLayer.frame = bounds
+        tintLayer.path = TrayShape.outline(bounds: bounds.insetBy(dx: 1, dy: 1))
         tintLayer.frame = bounds
+        blur.maskImage = TrayContentView.maskImage(for: bounds.size)
+    }
+
+    /// Alpha mask image of the tray silhouette (clips the blur material).
+    private static func maskImage(for size: CGSize) -> NSImage? {
+        guard size.width > 1, size.height > 1 else { return nil }
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(cgPath: TrayShape.outline(bounds: rect)).fill()
+            return true
+        }
+        image.capInsets = .init()
+        return image
     }
 
     // MARK: Notification tint (shown while tray is open)
@@ -115,8 +148,8 @@ final class TrayContentView: NSView {
 
     private func edge(at p: CGPoint) -> DragEdge? {
         let nearBottom = p.y < grabZone
-        let nearLeft = p.x < grabZone
-        let nearRight = p.x > bounds.width - grabZone
+        let nearLeft = p.x < grabZone + TrayShape.filletRadius
+        let nearRight = p.x > bounds.width - grabZone - TrayShape.filletRadius
         if nearBottom && nearLeft { return .bottomLeft }
         if nearBottom && nearRight { return .bottomRight }
         if nearBottom { return .bottom }
