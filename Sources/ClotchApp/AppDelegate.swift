@@ -128,14 +128,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Expand outward from the notch: start at the notch rect itself,
         // grow width sideways and height downward.
         let target = expandedFrame()
-        panel.setFrame(anchor, display: false)
+        panel.setFrame(target, display: true)
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.28
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.0)
-            panel.animator().setFrame(target, display: true)
-        } completionHandler: { [weak self] in
-            guard let self else { return }
+        let fraction = CGSize(
+            width: max(anchor.width / target.width, 0.12),
+            height: max(anchor.height / target.height, 0.06)
+        )
+        trayView.animateUnfold(from: fraction) { [weak self] in
+            guard let self, self.isOpen else { return }
             self.panel.makeKeyAndOrderFront(nil)
             self.panel.makeFirstResponder(self.terminal.view)
             self.hover.trackLeave = true
@@ -148,13 +148,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hover.trackLeave = false
         hover.cancelLeaveTimer()
         trayView.clearTint()
-        // Fold back into the notch: shrink to the notch rect, then hide.
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0.0, 0.8, 0.4)
-            panel.animator().setFrame(anchor, display: true)
-        } completionHandler: { [weak self] in
-            self?.panel.orderOut(nil)
+        // Fold back into the notch: shrink the content layer, then hide the panel.
+        let current = panel.frame.size
+        let fraction = CGSize(
+            width: max(anchor.width / max(current.width, 1), 0.12),
+            height: max(anchor.height / max(current.height, 1), 0.06)
+        )
+        trayView.animateFold(to: fraction) { [weak self] in
+            guard let self, !self.isOpen else { return }
+            self.panel.orderOut(nil)
         }
     }
 

@@ -32,6 +32,7 @@ final class TrayContentView: NSView {
     private let maskShape = CAShapeLayer()
     private let borderLayer = CAShapeLayer()
     private let tintLayer = CAShapeLayer()
+    private let terminalView: NSView
     var onResize: ((CGSize) -> Void)?
     var onResizeEnded: (() -> Void)?
 
@@ -42,6 +43,7 @@ final class TrayContentView: NSView {
     private let grabZone: CGFloat = 8
 
     init(terminal: NSView, topInset: CGFloat) {
+        self.terminalView = terminal
         super.init(frame: .zero)
         wantsLayer = true
 
@@ -68,6 +70,7 @@ final class TrayContentView: NSView {
 
         terminal.translatesAutoresizingMaskIntoConstraints = false
         blur.addSubview(terminal)
+        terminal.wantsLayer = true
 
         NSLayoutConstraint.activate([
             blur.topAnchor.constraint(equalTo: topAnchor),
@@ -142,6 +145,83 @@ final class TrayContentView: NSView {
     func clearTint() {
         tintLayer.opacity = 0
         tintLayer.shadowOpacity = 0
+    }
+
+    // MARK: Open/close animation
+    // NSWindow.animator() cannot spring, so the window frame is set to its
+    // final rect instantly and the content layer scales from a notch-sized
+    // fraction, anchored at top-center.
+
+    private func prepareAnchor() {
+        guard let layer else { return }
+        layer.anchorPoint = CGPoint(x: 0.5, y: 1)
+        layer.position = CGPoint(x: bounds.midX, y: bounds.maxY)
+    }
+
+    func animateUnfold(from fraction: CGSize, completion: @escaping () -> Void) {
+        guard let layer else { completion(); return }
+        prepareAnchor()
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock(completion)
+
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = CATransform3DMakeScale(fraction.width, fraction.height, 1)
+        spring.toValue = CATransform3DIdentity
+        spring.mass = 1
+        spring.stiffness = 220
+        spring.damping = 14          // slight overshoot
+        spring.initialVelocity = 4
+        spring.duration = spring.settlingDuration
+        layer.add(spring, forKey: "unfold")
+
+        if let termLayer = terminalView.layer {
+            let start = CACurrentMediaTime() + 0.16
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.0
+            fade.toValue = 1.0
+            let grow = CABasicAnimation(keyPath: "transform.scale")
+            grow.fromValue = 0.97
+            grow.toValue = 1.0
+            for anim in [fade, grow] {
+                anim.beginTime = start
+                anim.duration = 0.25
+                anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                anim.fillMode = .backwards
+            }
+            termLayer.add(fade, forKey: "fadeIn")
+            termLayer.add(grow, forKey: "growIn")
+        }
+        CATransaction.commit()
+    }
+
+    func animateFold(to fraction: CGSize, completion: @escaping () -> Void) {
+        guard let layer else { completion(); return }
+        prepareAnchor()
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            // Reset so the next unfold starts clean.
+            self?.layer?.removeAllAnimations()
+            self?.layer?.transform = CATransform3DIdentity
+            self?.layer?.opacity = 1
+            completion()
+        }
+        let shrink = CABasicAnimation(keyPath: "transform")
+        shrink.fromValue = CATransform3DIdentity
+        shrink.toValue = CATransform3DMakeScale(fraction.width, fraction.height, 1)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1.0
+        fade.toValue = 0.0
+        for anim in [shrink, fade] {
+            anim.duration = 0.18
+            anim.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0.0, 0.8, 0.4)
+            anim.fillMode = .forwards
+            anim.isRemovedOnCompletion = false
+        }
+        layer.add(shrink, forKey: "fold")
+        layer.add(fade, forKey: "foldFade")
+        CATransaction.commit()
     }
 
     // MARK: Edge resize
